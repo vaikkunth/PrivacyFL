@@ -74,8 +74,8 @@ This library is intended to be modified as needed for your use case. However, so
 
 ## Authors
 
-Anton Peraire-Bueno \
-Vaikkunth Mugunthan 
+Vaikkunth Mugunthan  Anton Peraire-Bueno Lalana Kagal
+
 
 ## License
 
