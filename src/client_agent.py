@@ -3,13 +3,19 @@ import numpy as np
 import sys
 import random
 import config
+import threading
 from warnings import simplefilter
 from datetime import datetime
+from sklearn import metrics
 
 from agent import Agent
 from message import Message
-from utils.dp_mechanisms import laplace, boundedLaplace, staircase, gaussian
+from utils.dp_mechanisms import laplace
 import utils.diffie_hellman as dh
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import SGDClassifier
+from sklearn.preprocessing import MinMaxScaler
 
 from pyspark.ml.classification import LogisticRegression
 
@@ -17,7 +23,7 @@ simplefilter(action='ignore', category=FutureWarning)
 
 
 class ClientAgent(Agent):
-    def __init__(self, agent_number, train_datasets, evaluator, sensitivity):
+    def __init__(self, agent_number, train_datasets, evaluator, active_clients):
         """
         Initializes an instance of client agent
 
@@ -27,14 +33,14 @@ class ClientAgent(Agent):
         :type train_datasets: dictionary indexed by ints mapping to pyspark dataframes
         :param evaluator: evaluator instance used to evaluate new weights
         :type evaluator: evaluator, defined in parallelized.py
-        :param sensitivity: sensitivity for differential privacy as defined in DPmechanisms.py
-        :type sensitivity: int
+        :param active_clients: Clients currently in simulation. Will be updated if clients drop out
+        :type sensitivity: set
         """
         super(ClientAgent, self).__init__(agent_number=agent_number, agent_type="client_agent")
 
         self.train_datasets = train_datasets
         self.evaluator = evaluator
-        self.sensitivity = sensitivity
+        self.active_clients = active_clients
 
         self.directory = None
         self.pubkeyList = None
@@ -47,10 +53,16 @@ class ClientAgent(Agent):
         self.computation_times = {}
 
         self.personal_weights = {}  # personal weights. Maps iteration (int) to weights (numpy array)
-        self.federated_weights = {}  # averaged weights
-
         self.personal_intercepts = {}
+
+        self.weights_dp_noise = {}  # keyed by iteration; noise added at each iteration
+        self.intercepts_dp_noise = {}
+
+        self.federated_weights = {}  # averaged weights
         self.federated_intercepts = {}
+
+        self.personal_accuracy = {}
+        self.federated_accuracy = {}
 
     def initializations(self):
         """
@@ -117,70 +129,156 @@ class ClientAgent(Agent):
 
         self.update_deltas()  # this method generates seeds and deltas from the common keys
 
-    def compute_weights(self, iteration):
-        """
-        Method invoked by server when request weights.
-        :param iteration: iteration of simulation currently on
-        :type iteration: int
-        :return: Message containing weights with offset and differential privacy added if specified in config file
-        :rtype: instance of Message as defined in Message.py
-        """
+    def produce_weights(self, message):
         start_time = datetime.now()
+        body = message.body
+        iteration, lock, simulated_time = body['iteration'], body['lock'], body['simulated_time']
 
-        if iteration > len(self.train_datasets):
+        if iteration - 1 > len(self.train_datasets):  # iteration is indexed starting from 1
             raise (ValueError(
                 'Not enough data to support a {}th iteration. Either change iteration data length in config.py or decrease amount of iterations.'.format(
-                    iteration + 1)))
+                    iteration)))
 
+        if config.USING_PYSPARK:
+            weights, intercepts = self.compute_weights_pyspark(iteration)
+        else:
+            weights, intercepts = self.compute_weights_sklearn(iteration)
+
+        self.personal_weights[iteration] = weights
+        self.personal_intercepts[iteration] = intercepts
+
+        # create copies of weights and intercepts since we may be adding to them
+        final_weights, final_intercepts = copy.deepcopy(weights), copy.deepcopy(intercepts)
+
+        if config.USE_DP_PRIVACY:
+            lock.acquire()  # for random seed
+            final_weights, final_intercepts = \
+                self.add_noise(weights=weights, intercepts=intercepts, iteration=iteration)
+            lock.release()
+
+        if config.USE_SECURITY:  # adding security via diffie-helman offsets
+            final_weights, final_intercepts = \
+                self.add_security_offsets(weights=final_weights, intercepts=final_intercepts)
+        end_time = datetime.now()
+        computation_time = end_time - start_time
+        self.computation_times[iteration] = computation_time
+        # multiply latency by two: first the server has to request the value, then the client has to return it
+
+        simulated_time += computation_time + config.LATENCY_DICT[self.name]['server_agent0']
+
+        body = {'weights': final_weights, 'intercepts': final_intercepts, 'iter': iteration,
+                'computation_time': computation_time, 'simulated_time': simulated_time}  # generate body
+
+        return Message(sender_name=self.name, recipient_name=self.directory.server_agents, body=body)
+
+    def compute_weights_pyspark(self, iteration):
+        '''
+        Corresponds to algorithm 2 in the paper
+        '''
         dataset = self.train_datasets[iteration]
-
         lr = LogisticRegression(maxIter=config.LOG_MAX_ITER)
         lrModel = lr.fit(dataset)
 
         weights = lrModel.coefficientMatrix.toArray()
         intercepts = lrModel.interceptVector
-        self.personal_weights[iteration] = weights
-        self.personal_intercepts[iteration] = intercepts
+        return weights, intercepts
 
+    def compute_weights_sklearn(self, iteration):
+        '''
+        Corresponds to algorithm 1 inthe paper
+        '''
+        X, y = self.train_datasets[iteration]
+
+        lr = SGDClassifier(alpha=0.0001, loss="log", random_state=config.RANDOM_SEEDS[self.name][iteration])
+
+        # Assign prev round coefficients
+        if iteration > 1:
+            federated_weights = copy.deepcopy(self.federated_weights[iteration - 1])
+            federated_intercepts = copy.deepcopy(self.federated_intercepts[iteration - 1])
+        else:
+            federated_weights = None
+            federated_intercepts = None
+
+        lr.fit(X, y, coef_init=federated_weights, intercept_init=federated_intercepts)
+        local_weights = lr.coef_
+        local_intercepts = lr.intercept_
+
+        return local_weights, local_intercepts
+
+    def add_noise(self, weights, intercepts, iteration):
         # preparing value to send to server by adding deltas and DP noise
-        weights_modified = copy.deepcopy(weights)
-        intercepts_modified = copy.deepcopy(intercepts)
 
+        weights_shape = weights.shape
+        weights_dp_noise = np.zeros(weights_shape)
+
+        intercepts_shape = intercepts.shape
+        intercepts_dp_noise = np.zeros(intercepts_shape)
+
+        # generate DP parameters
+        active_clients_lens = [config.LENS_PER_ITERATION[client_name] for client_name in self.active_clients]
+
+        smallest_dataset = min(active_clients_lens)
+        if config.USING_CUMULATIVE:
+            smallest_dataset *= iteration
+
+        sensitivity = 2 / (
+                len(self.active_clients) * smallest_dataset * config.alpha)
+        epsilon = config.EPSILONS[self.name]
+
+        random.seed(config.RANDOM_SEEDS[self.name][iteration])
         # adding differentially private noise
-        if config.USE_DP_PRIVACY:
-            for i, weight_vec in enumerate(weights_modified):  # weights_modified is 2-D
-                for j, weight in enumerate(weight_vec):
-                    dp_noise = laplace(mean=config.mean, sensitivity=self.sensitivity, epsilon=config.epsilon)
-                    weights_modified[i][j] += dp_noise
-
-            for i, weight in enumerate(intercepts_modified):
-                dp_noise = laplace(mean=config.mean, sensitivity=self.sensitivity, epsilon=config.epsilon)
-                intercepts_modified[i] += dp_noise
-
-        if config.USE_SECURITY:  # adding security via diffie-helman offsets
-            adding = True
-            for agent, offset in self.deltas.items():
-                if offset == 0:
-                    adding = False
+        for i in range(weights_shape[0]):  # weights_modified is 2-D
+            for j in range(weights_shape[1]):
+                if config.DP_ALGORITHM == 'Laplace':
+                    dp_noise = laplace(mean=config.mean, sensitivity=sensitivity, epsilon=epsilon)
+                elif config.DP_ALGORITHM == 'Gamma':
+                    scale = sensitivity / epsilon
+                    num_clients = len(self.directory.clients)
+                    dp_noise = random.gammavariate(1 / num_clients, scale) - random.gammavariate(1 / num_clients,
+                                                                                                 scale)
                 else:
-                    if adding == True:
-                        weights_modified += offset
-                        intercepts_modified += offset
-                    else:
-                        weights_modified -= offset
-                        intercepts_modified -= offset
-            self.update_deltas()  # update the deltas after using them
+                    raise AssertionError('Need to specify config.DP_ALGORITHM as Laplace or Gamma')
+                weights_dp_noise[i][j] = dp_noise
 
-        end_time = datetime.now()
-        computation_time = end_time - start_time
-        self.computation_times[iteration] = computation_time
-        # multiply latency by two: first the server has to request the value, then the client has to return it
-        simulated_time = computation_time + 2 * config.LATENCY_DICT[self.name]['server_agent0']
+        if config.INTERCEPTS_DP_NOISE:
+            for i in range(intercepts_shape[0]):
+                if config.DP_ALGORITHM == 'Laplace':
+                    dp_noise = laplace(mean=config.mean, sensitivity=sensitivity, epsilon=epsilon)
+                elif config.DP_ALGORITHM == 'Gamma':
+                    scale = sensitivity / epsilon
+                    num_clients = len(self.directory.clients)
+                    dp_noise = random.gammavariate(1 / num_clients, scale) - random.gammavariate(1 / num_clients, scale)
+                else:
+                    raise AssertionError('Need to specify config.DP_ALGORITHM as Laplace or Gamma')
+                intercepts_dp_noise[i] = dp_noise
 
-        body = {'weights': weights_modified, 'intercepts': intercepts_modified, 'iter': iteration,
-                'computation_time': computation_time, 'simulated_time': simulated_time}  # generate body
+        weights_with_noise = copy.deepcopy(weights)  # make a copy to not mutate weights
+        intercepts_with_noise = copy.deepcopy(intercepts)
 
-        return Message(sender_name=self.name, recipient_name=self.directory.server_agents, body=body)
+        self.weights_dp_noise[iteration] = weights_dp_noise
+        weights_with_noise += weights_dp_noise
+        self.intercepts_dp_noise[iteration] = intercepts_dp_noise
+        intercepts_with_noise += intercepts_dp_noise
+        return weights_with_noise, intercepts_with_noise
+
+    def add_security_offsets(self, weights, intercepts):
+        adding = True  # Controls flow of loop. When other agent number is greater, subtract offset instead of add it
+        for agent_name, offset in self.deltas.items():  # dictionary but should be ordered since Python 3
+            if agent_name == self.name:
+                adding = False  # from here on out subtract offsets for next clients
+            elif agent_name in self.active_clients:
+                if adding == True:
+                    weights += offset
+                    intercepts += offset
+                else:
+                    weights -= offset
+                    intercepts -= offset
+            else:
+                # client no longer in simulation so don't add offset
+                pass
+        self.update_deltas()  # update the deltas after using them
+
+        return weights, intercepts
 
     def update_deltas(self):
         """
@@ -203,56 +301,66 @@ class ClientAgent(Agent):
 
                 seed_b = seed_b[20:]
                 seed = int(seed_b, 2)
-                random.seed(seed)
+                random.seed(seed) # generate new seed
                 seed = random.randint(-sys.maxsize, sys.maxsize)
                 self.seeds[agent] = seed
                 self.deltas[agent] = delta
 
-    def receive_weights(self, iteration, return_weights, return_intercepts, simulated_time):
-        """
-        Called by server to return federated weights after each iteration
-        :param iteration: iteration currently on
-        :type iteration: int
-        :param return_weights: federated weights
-        :type return_weights: numpy array
-        :param return_intercepts: federeated intercepts
-        :type return_intercepts: numpy array
-        :param simulated_time: simulated time it would take for the client to receive the federated weights
-        :type datetime
-        :return: Message indicating whether weights have converged
-        :rtype: instance of Message defined in Message.py
-        """
-        # receives weights after an iteration
+    def receive_weights(self, message):
+        body = message.body
+        iteration, return_weights, return_intercepts, simulated_time = body['iteration'], body['return_weights'], body[
+            'return_intercepts'], body['simulated_time']
+
+        return_weights = copy.deepcopy(return_weights)
+        return_intercepts = copy.deepcopy(return_intercepts)
+
+        if config.USE_DP_PRIVACY and config.SUBTRACT_DP_NOISE:
+            # subtract your own DP noise
+            return_weights -= self.weights_dp_noise[iteration] / len(self.active_clients)
+            return_intercepts -= self.intercepts_dp_noise[iteration] / len(self.active_clients)
+
         self.federated_weights[iteration] = return_weights
         self.federated_intercepts[iteration] = return_intercepts
 
+        personal_weights = self.personal_weights[iteration]
+        personal_intercepts = self.personal_intercepts[iteration]
         # evaluate best personal model and best federated model
 
         # average weights through all iterations
-        personal_weights_averaged = np.average(list(self.personal_weights.values()), axis=0)
-        personal_intercepts_averaged = np.average(list(self.personal_intercepts.values()), axis=0)
+        # personal_weights_averaged = np.average(list(self.personal_weights.values()), axis=0)
+        # personal_intercepts_averaged = np.average(list(self.personal_intercepts.values()), axis=0)
 
         # average federated weights from all iterations
-        federated_weights_averaged = np.average(list(self.federated_weights.values()), axis=0)
-        federated_intercepts_averaged = np.average(list(self.federated_intercepts.values()), axis=0)
+        # federated_weights_averaged = np.average(list(self.federated_weights.values()), axis=0)
+        # federated_intercepts_averaged = np.average(list(self.federated_intercepts.values()), axis=0)
 
-        satisfactory = self.satisfactory_weights((personal_weights_averaged, personal_intercepts_averaged), (
-            federated_weights_averaged, federated_intercepts_averaged))  # check whether weights have converged
+        converged = self.satisfactory_weights((personal_weights, personal_intercepts), (
+            return_weights, return_intercepts))  # check whether weights have converged
+        personal_accuracy = self.evaluator.accuracy(personal_weights, personal_intercepts)
+        federated_accuracy = self.evaluator.accuracy(return_weights, return_intercepts)
 
-        personal_accuracy = self.evaluator.accuracy(personal_weights_averaged, personal_intercepts_averaged)
-        federated_accuracy = self.evaluator.accuracy(federated_weights_averaged, federated_intercepts_averaged)
+        self.personal_accuracy[iteration] = personal_accuracy
+        self.federated_accuracy[iteration] = federated_accuracy
 
-        args = (self.name, iteration, personal_accuracy, self.computation_times[iteration], federated_accuracy, simulated_time)
-        print(
-            'Performance Metrics for {} on iteration {} \n'
-            '------------------------------------------- \n'
-            'Personal accuracy: {} \n'
-            'Personal computation time: {} \n'
-            'Federated accuracy: {} \n'
-            'Simulated time to receive federated weights: {} \n'.format(*args))
+        args = [self.name, iteration, personal_accuracy, federated_accuracy]
+        iteration_report = 'Performance Metrics for {} on iteration {} \n' \
+                           '------------------------------------------- \n' \
+                           'Personal accuracy: {} \n' \
+                           'Federated accuracy: {} \n' \
+
+        if config.SIMULATE_LATENCIES:
+            args.append(self.computation_times[iteration])
+            iteration_report += 'Personal computation time: {} \n'
+
+            args.append(simulated_time)
+            iteration_report += 'Simulated time to receive federated weights: {} \n \n'
+
+        if config.VERBOSITY:
+            print(iteration_report.format(*args))
 
         msg = Message(sender_name=self.name, recipient_name=self.directory.server_agents,
-                      body={'value': satisfactory})
+                      body={'converged': converged,
+                            'simulated_time': simulated_time + config.LATENCY_DICT[self.name]['server_agent0']})
         return msg
 
     def satisfactory_weights(self, personal, federated):
@@ -272,3 +380,13 @@ class ClientAgent(Agent):
         intercepts_differences = np.abs(federated_intercepts - personal_intercepts)
         return (weights_differences < config.tolerance).all() and (
                 intercepts_differences < config.tolerance).all()  # check all weights are close enough
+
+    def remove_active_clients(self, message):
+        body = message.body
+        clients_to_remove, simulated_time, iteration = body['clients_to_remove'], body['simulated_time'], body[
+            'iteration']
+
+        print('Simulated time for client {} to finish iteration {}: {}\n'.format(self.name, iteration, simulated_time))
+
+        self.active_clients -= clients_to_remove
+        return None
