@@ -1,12 +1,13 @@
 from numbers import Real
+import random
 import numpy as np
-from numpy.random import random
-from numpy.random import geometric, random
 
 def laplace(mean, sensitivity, epsilon): # mean : value to be randomized (mean)
         scale = sensitivity / epsilon
-        rand = random() - 0.5 # rand : uniform random variable
+        rand = random.uniform(0,1) - 0.5 # rand : uniform random variable
         return mean - scale * np.sign(rand) * np.log(1 - 2 * np.abs(rand))
+'''
+Need to be converted from numpy to random module
 
 def boundedLaplace(mean, sensitivity, epsilon, delta):
     #epsion>0 and delta >0 and <0.5
@@ -70,3 +71,5 @@ def gaussian(mean, sensitivity, epsilon, delta ):
     stdNormal = np.sqrt(- 2 * np.log(randUnif1)) * np.cos(2 * np.pi * randUnif2)
       
     return stdNormal * scale + mean
+
+'''
