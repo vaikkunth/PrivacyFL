@@ -1,4 +1,4 @@
-# SparkPrivFl: A privacy-perserving simulator for federated learning
+# PrivacyFL: A simulator for privacy-preserving and secure federated learning
 
 This repository contains the source code for running a privacy perserving federated learning simulator. The source code is currently set up for the configuration of three clients performing secure and differentially private federated learning using logistic regresion on the MNIST dataset. This library, however, is meant to be modified so as to simulate your own secure federated machine learning configuration. We hope that this simulation can help users decide whether it is beneficial for them to participate in differentially-private federated learning for a given differentially private algorithm.
 
@@ -84,7 +84,7 @@ This project is licensed under the MIT License
 
 MIT License
 
-Copyright (c) 2020 Vaikkunth, Anton, Lalana
+Copyright (c) 2020 Vaikkunth, Anton, Lalana (PrivacyFL)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
