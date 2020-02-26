@@ -61,7 +61,6 @@ class ServerAgent(Agent):
                     args.append((client_instance, arg))
                 messages = calling_pool.map(client_computation_caller, args)
 
-
             server_logic_start = datetime.now()
 
             vals = {message.sender: (message.body['weights'], message.body['intercepts']) for message in messages}

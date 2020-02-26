@@ -15,13 +15,13 @@ import random
 """Simulation Parameters"""
 # NUM_CLIENTS: Number of client agents
 NUM_CLIENTS = 3
-client_names = ['client_agent'+str(i) for i in range(NUM_CLIENTS)]
+client_names = ['client_agent' + str(i) for i in range(NUM_CLIENTS)]
 # NUM_SERVERS: More than one server will require additional coding to specify each server's behavior in the simulation
 NUM_SERVERS = 1
 # ITERATIONS: How many iterations to run simulation for
-ITERATIONS = 10
+ITERATIONS = 4
 # LEN_PER_ITERATION: How many datapoints each client gets per iteration (starts at 0). On iteration i, each client has (i+1) * LEN_PER_ITERATION samples
-len_per_iteration = 30  # using equal size datasets for each client in this example
+len_per_iteration = 100  # using equal size datasets for each client in this example
 LENS_PER_ITERATION = {client_name: len_per_iteration for client_name in client_names}
 
 # LEN_TEST: Length of test dataset. Note whole dataset length is 1797
@@ -42,19 +42,19 @@ USE_SECURITY = True
 
 """Differential Privacy"""
 # USE_DP_PRIVACY: Whether to implement differential privacy functionality. Defaults to laplacian noise.
-USE_DP_PRIVACY = True
+USE_DP_PRIVACY = False
 # SUBTRACT_DP_NOISE: Use more advanced version of protocol which has each client subtract the DP noise it added from the federated model it receives
-SUBTRACT_DP_NOISE = True # Subtract your own DP noise from federated model to increase accuracy
+SUBTRACT_DP_NOISE = False  # Subtract your own DP noise from federated model to increase accuracy
 assert (SUBTRACT_DP_NOISE == False or (
             SUBTRACT_DP_NOISE == True and USE_DP_PRIVACY == True))  # Only subtract DP Noise if adding it to begin with
 
 INTERCEPTS_DP_NOISE = False  # Add DP noise to intercepts (for Logistic Regression example)
 # DP_ALGORITHM: either Laplace or Gamma. Can easily add more in client agent's code
 
-DP_ALGORITHM = "Laplace"
+DP_ALGORITHM = "Gamma"
 
 # DP Privacy Parameters
-epsilon = 0.0001  # smaller epsilon --> more noise/less accuracy
+epsilon = 1.0  # smaller epsilon --> more noise/less accuracy
 # can make each client's epsilon different if desired
 EPSILONS = {client_name: epsilon for client_name in client_names}
 alpha = 1
@@ -62,11 +62,11 @@ mean = 0
 
 """Client Dropout"""
 # CLIENT_DROPOUT: When TRUE, clients drop out of simulation when personal weights are within tolerance of federated weights
-CLIENT_DROPOUT = False
+CLIENT_DROPOUT = True
 tolerance = 20.0  # note this value should change depending on whether you are normalizing
 
 """Latency"""
-SIMULATE_LATENCIES = False
+SIMULATE_LATENCIES = True
 # Define any agent-agent communication latencies here. If none is provided, defaults to zero.
 
 
