@@ -146,6 +146,7 @@ class ClientAgentServerless(Agent):
             weights, intercepts = self.compute_weights_pyspark(iteration)
         else:
             weights, intercepts = self.compute_weights_sklearn(iteration)
+
         self.personal_weights[iteration] = weights
         self.personal_intercepts[iteration] = intercepts
 
@@ -180,7 +181,6 @@ class ClientAgentServerless(Agent):
         '''
         Corresponds to algorithm 2 in the paper
         '''
-
         dataset = self.train_datasets[iteration]
         lr = LogisticRegression(maxIter=config.LOG_MAX_ITER)
         lrModel = lr.fit(dataset)
@@ -195,7 +195,7 @@ class ClientAgentServerless(Agent):
         '''
         X, y = self.train_datasets[iteration]
 
-        lr = SGDClassifier(alpha=0.000001, loss="log", random_state=config.RANDOM_SEEDS[self.name][iteration])
+        lr = SGDClassifier(alpha=0.0001, loss="log", random_state=config.RANDOM_SEEDS[self.name][iteration])
 
         # Assign prev round coefficients
         if iteration > 1:
@@ -204,6 +204,7 @@ class ClientAgentServerless(Agent):
         else:
             federated_weights = None
             federated_intercepts = None
+
         lr.fit(X, y, coef_init=federated_weights, intercept_init=federated_intercepts)
         local_weights = lr.coef_
         local_intercepts = lr.intercept_
@@ -321,9 +322,14 @@ class ClientAgentServerless(Agent):
 
         self.other_client_weights[iteration][message.sender] = client_weight
         self.other_client_intercepts[iteration][message.sender] = client_intercept
+        if len(self.other_client_weights[iteration]) == len(self.active_clients) - 1:  # -1 because of yourself
+            self.federate_weights(iteration)
         return None
 
     def federate_weights(self, iteration):
+        while iteration not in self.personal_weights.keys():
+            pass  # waiting until you've also finished computation
+
         all_weights = list(self.other_client_weights[iteration].values())
         all_weights.append(self.personal_weights[iteration])
 
@@ -332,7 +338,6 @@ class ClientAgentServerless(Agent):
 
         federated_weights = np.average(all_weights, axis = 0)  # the weights for this iteration!
         federated_intercepts = np.average(all_intercepts, axis=0)
-
         self.federated_weights[iteration] = federated_weights
         self.federated_intercepts[iteration] = federated_intercepts
 
@@ -355,5 +360,7 @@ class ClientAgentServerless(Agent):
         return None
 
     def final_statistics(self):
-        print("PERSONAL ACCURACY IS {}".format(list(self.personal_accuracy.values())))
-        print("FEDERATED ACCURACY IS {}".format(self.federated_accuracy.values()))
+        print("PERSONAL ACCURACY IS {}".format(self.personal_accuracy))
+        print(self.personal_accuracy)
+        print("FEDERATED ACCURACY IS {}".format(self.federated_accuracy))
+        print(self.federated_accuracy)

@@ -29,11 +29,6 @@ def client_computation_caller(inp):
     __ = client_instance.produce_weights(iteration, lock)
     return None
 
-def client_federating_caller(inp):
-    client_instance, iteration = inp
-    __ = client_instance.federate_weights(iteration)
-    return None
-
 class InitializerServerless:
     def __init__(self, num_clients, iterations):
         """
@@ -120,13 +115,7 @@ class InitializerServerless:
                 args = []
                 for client_instance in self.clients.values():
                     args.append((client_instance, i, lock))
-                result = calling_pool.map(client_computation_caller, args)
-
-                args = []
-                for client_instance in self.clients.values():
-                    args.append((client_instance, i))
-                result = calling_pool.map(client_federating_caller, args)
-
+                __ = calling_pool.map(client_computation_caller, args)
 
 
     def run_simulation(self, num_iterations):
