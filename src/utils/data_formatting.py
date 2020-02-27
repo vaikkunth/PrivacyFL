@@ -23,6 +23,23 @@ def create_spark_df(X, y):
 
 
 def partition_data(X, y, client_names, num_iterations, lens_per_iteration, cumulative=False, pyspark=False):
+    """
+    Function used to partition data to give to clients for simulation.
+    :type X: numpy array
+    :type y: numpy array
+    :param client_names: list of all client agents' name
+    :param num_iterations: number of iterations to partition data for (initially set in config.py)
+    :type num_iterations: int
+    :param lens_per_iteration: length of new dataset available each iteration for each client
+    :type lens_per_iteration: dictionary
+    :param cumulative: flag that indidicates where dataset creation should be cumulative. If True,
+    the dataset at iteration i+1 contains all of the data from previous iterations as well.
+    :type cumulative: bool
+    :param pyspark: flag that processes data into PySpark dataframe when True, numpy arrays when false.
+    :type pyspark: bool
+    :return: dictionary mapping each client by name to another dictionary which contains its dataset for each
+    iteration mapped by ints (iteration). The datasets are either PySpark dataframes or numpy arrays.
+    """
     client_datasets = {client_name: None for client_name in client_names}
     # partition each client its data
     last_index = 0  # where to start the next client's dataset from
