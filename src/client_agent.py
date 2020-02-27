@@ -21,7 +21,6 @@ from pyspark.ml.classification import LogisticRegression
 
 simplefilter(action='ignore', category=FutureWarning)
 
-
 class ClientAgent(Agent):
     def __init__(self, agent_number, train_datasets, evaluator, active_clients):
         """
@@ -34,7 +33,6 @@ class ClientAgent(Agent):
         :param evaluator: evaluator instance used to evaluate new weights
         :type evaluator: evaluator, defined in parallelized.py
         :param active_clients: Clients currently in simulation. Will be updated if clients drop out
-        :type sensitivity: set
         """
         super(ClientAgent, self).__init__(agent_number=agent_number, agent_type="client_agent")
 
@@ -130,6 +128,12 @@ class ClientAgent(Agent):
         self.update_deltas()  # this method generates seeds and deltas from the common keys
 
     def produce_weights(self, message):
+        """
+        :param message: message containing information necessary to produce weights for the iteration
+        :type message: Message
+        :return: message containing weights with security and/or DP noise added, as specified in config.py
+        :rtype: Message
+        """
         start_time = datetime.now()
         body = message.body
         iteration, lock, simulated_time = body['iteration'], body['lock'], body['simulated_time']
@@ -172,9 +176,14 @@ class ClientAgent(Agent):
         return Message(sender_name=self.name, recipient_name=self.directory.server_agents, body=body)
 
     def compute_weights_pyspark(self, iteration):
-        '''
-        Corresponds to algorithm 2 in the paper
-        '''
+        """
+        Example of a function that would compute weights. This one uses PySpark to perform
+        logistic regression. If using this function, the datasets should be cumulative, i.e.,
+        the dataset in iteration i+1 should have the data from all previous iterations since the
+        weights are trained from scratch.
+        :return: weights and intercepts
+        :rtype: numpy arrays
+        """
         dataset = self.train_datasets[iteration]
         lr = LogisticRegression(maxIter=config.LOG_MAX_ITER)
         lrModel = lr.fit(dataset)
@@ -184,9 +193,16 @@ class ClientAgent(Agent):
         return weights, intercepts
 
     def compute_weights_sklearn(self, iteration):
-        '''
-        Corresponds to algorithm 1 inthe paper
-        '''
+        """
+        Example of a function that would compute weights. This one uses sklearn to perform
+        logistic regression. If using this function, the datasets should not be cumulative, i.e.,
+        the dataset in iteration i+1 should be completely new data since the training starts with the
+        federated weights from the previous iteration. Note that if using a compute_weights function like this,
+        the 'personal weights' are not created with only this clients dataset since it uses the *federated*
+        weights from previous iterations, which include other clients data.
+        :return: weights, intercepts
+        :rtype: numpy arrays
+        """
         X, y = self.train_datasets[iteration]
 
         lr = SGDClassifier(alpha=0.0001, loss="log", random_state=config.RANDOM_SEEDS[self.name][iteration])
@@ -206,8 +222,15 @@ class ClientAgent(Agent):
         return local_weights, local_intercepts
 
     def add_noise(self, weights, intercepts, iteration):
-        # preparing value to send to server by adding deltas and DP noise
-
+        """
+        Adds differentially private noise to weights as specified by parameters in config.py.
+        Also adds noise to intercepts if specified in intercepts.py.
+        The sensitivity is computed using the size of the smallest dataset used by any client in this iteration.
+        Note that modifications to add_noise might be necessary depending if you are using cumulative or non cumulative
+        datasets.
+        :return: weights, intercepts
+        :rtype: numpy arrays
+        """
         weights_shape = weights.shape
         weights_dp_noise = np.zeros(weights_shape)
 
@@ -262,6 +285,14 @@ class ClientAgent(Agent):
         return weights_with_noise, intercepts_with_noise
 
     def add_security_offsets(self, weights, intercepts):
+        """
+        Called if config.USE_SECURITY flag is on. Uses the offsets established by the diffie helman key exchange
+        to mask weights and intercepts. Client i adds the offset established with Client j to the weights if i < j
+        and otherwise subtracts it if i > j. If i = j, the client does not add anything since it does not have an offset
+        with itself.
+        :return: weights, intercepts
+        :rtype: numpy array, numpy array
+        """
         adding = True  # Controls flow of loop. When other agent number is greater, subtract offset instead of add it
         for agent_name, offset in self.deltas.items():  # dictionary but should be ordered since Python 3
             if agent_name == self.name:
@@ -284,7 +315,6 @@ class ClientAgent(Agent):
         """
         Updates commonkeyList. Called after each iteration to update values.
         """
-
         if None not in self.commonkeyList.values():  # if first time calling this function
             agents_and_seeds = self.commonkeyList.items()
             self.commonkeyList = self.commonkeyList.fromkeys(self.commonkeyList.keys(), None)
@@ -307,6 +337,14 @@ class ClientAgent(Agent):
                 self.deltas[agent] = delta
 
     def receive_weights(self, message):
+        """
+        Called by server agent to return federated weights.
+        :param message: message containing return weights and other necessary information
+        :type message: Message
+        :return: Message indicating whether client has converged in training this iteration, which only
+        matters if config.CLIENT_DROPOUT is True.
+        :rtype: Message
+        """
         body = message.body
         iteration, return_weights, return_intercepts, simulated_time = body['iteration'], body['return_weights'], body[
             'return_intercepts'], body['simulated_time']
@@ -324,15 +362,6 @@ class ClientAgent(Agent):
 
         personal_weights = self.personal_weights[iteration]
         personal_intercepts = self.personal_intercepts[iteration]
-        # evaluate best personal model and best federated model
-
-        # average weights through all iterations
-        # personal_weights_averaged = np.average(list(self.personal_weights.values()), axis=0)
-        # personal_intercepts_averaged = np.average(list(self.personal_intercepts.values()), axis=0)
-
-        # average federated weights from all iterations
-        # federated_weights_averaged = np.average(list(self.federated_weights.values()), axis=0)
-        # federated_intercepts_averaged = np.average(list(self.federated_intercepts.values()), axis=0)
 
         converged = self.satisfactory_weights((personal_weights, personal_intercepts), (
             return_weights, return_intercepts))  # check whether weights have converged
@@ -382,6 +411,13 @@ class ClientAgent(Agent):
                 intercepts_differences < config.tolerance).all()  # check all weights are close enough
 
     def remove_active_clients(self, message):
+        """
+        Method invoked by server agent when clients have dropped out.
+        If another client has dropped out, this client needs to know that so that
+        it knows now to add that security offset, and also to be able to dynamically compute
+        the differential privacy parameters.
+        :return: None
+        """
         body = message.body
         clients_to_remove, simulated_time, iteration = body['clients_to_remove'], body['simulated_time'], body[
             'iteration']
