@@ -3,7 +3,6 @@ import sys
 sys.path.append('..')
 import config
 
-
 def print_config(len_per_iteration):
     """
     Prints parameters at start of simulation. The two arguments are dynamically created and hence not in config.
