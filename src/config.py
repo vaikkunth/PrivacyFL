@@ -6,6 +6,9 @@ Configuration options included:
     - Toggling DP Privacy
     - Toggling Client Dropout
     - Settling latency values
+
+See PrivacyFl paper for more information about parameters.
+https://arxiv.org/abs/2002.08423
 """
 
 """Imports"""
