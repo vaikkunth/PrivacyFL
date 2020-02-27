@@ -14,6 +14,10 @@ First, clone this repository locally. Then create a conda enviroment by running:
 ```
 conda env create -f environment.yml -n YourEnvironmentName
 ```
+Activate the new enviornment:
+```
+source activate YourEnvironmentName
+```
 To validate correct installation `cd` to `src` and run 
 ```
 python run_simulation.py
