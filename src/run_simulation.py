@@ -17,4 +17,3 @@ if __name__ == '__main__':
     initializer.run_simulation(config.ITERATIONS,
                                server_agent_name='server_agent0')
     b = datetime.datetime.now()
-
