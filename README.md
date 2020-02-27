@@ -22,7 +22,7 @@ To validate correct installation `cd` to `src` and run
 ```
 python run_simulation.py
 ```
-Note that this simulation uses pyspark for the clients' local training.
+If you encounter any issues, please let us know so that we can help in getting the simulation up and running. 
 
 ## System Architecure
 ### Agent 
