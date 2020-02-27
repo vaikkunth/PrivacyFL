@@ -1,3 +1,10 @@
+"""
+NOTE: The Serverless directory was written as a proof of concept extension of our library
+that involves no servers, with clients communicating with each other directly.
+"""
+
+
+
 import sys
 sys.path.append('..')
 
