@@ -50,14 +50,6 @@ class Initializer:
         X_train = X_train[:number_of_samples]
         y_train = y_train[:number_of_samples]
 
-        # df = data_formatting.create_spark_df(X_train, y_train)
-        # train_datasets = df.randomSplit([1/num_clients] * num_clients)  # split up dataset for clients
-
-        # client_to_datasets = {}  # do the splitting by iterations now since clients cannot split the datasets dynamically very easily
-        # for i, dataset in enumerate(train_datasets):
-        #    client_datasets = dataset.randomSplit([1/iterations] * iterations) # split evenly into iterations
-        #    client_to_datasets[i] = client_datasets
-
         client_to_datasets = data_formatting.partition_data(X_train, y_train, config.client_names, iterations,
                                                             config.LENS_PER_ITERATION, cumulative=config.USING_CUMULATIVE, pyspark=config.USING_PYSPARK)
 
