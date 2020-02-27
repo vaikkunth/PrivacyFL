@@ -3,7 +3,6 @@ sys.path.append('..')
 
 import numpy as np
 import config
-import random
 from datetime import datetime
 import multiprocessing
 from multiprocessing.pool import ThreadPool
@@ -133,6 +132,12 @@ class ServerAgent(Agent):
         self.print_convergences(converged)
 
     def print_convergences(self, converged):
+        """
+        Used to print out all the clients that have converged at the end of request values
+        :param converged: dict of converged clients containing iteration of convergence
+        :type converged: dict
+        """
+
         for client_name in self.directory.clients.keys():
             if client_name in converged:
                 print('Client {} converged on iteration {}'.format(client_name, converged[client_name]))
@@ -140,6 +145,9 @@ class ServerAgent(Agent):
                 print('Client {} never converged'.format(client_name))
 
     def final_statistics(self):
+        """
+        USED FOR RESEARCH PURPOSES.
+        """
         # for research purposes
         client_accs = []
         fed_acc = []
