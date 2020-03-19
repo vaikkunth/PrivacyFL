@@ -27,9 +27,6 @@ class Initializer:
         """
 
         global len_per_iteration
-        if config.USING_PYSPARK:
-            spark = SparkSession.builder.appName('SecureFederatedLearning').getOrCreate()  # initialize spark session
-            spark.sparkContext.setLogLevel("ERROR")  # supress sparks messages
 
         digits = load_digits()  # using sklearn's MNIST dataset
         X, y = digits.data, digits.target
