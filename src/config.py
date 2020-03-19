@@ -22,9 +22,9 @@ client_names = ['client_agent' + str(i) for i in range(NUM_CLIENTS)]
 # NUM_SERVERS: More than one server will require additional coding to specify each server's behavior in the simulation
 NUM_SERVERS = 1
 # ITERATIONS: How many iterations to run simulation for
-ITERATIONS = 4
+ITERATIONS = 10
 # LEN_PER_ITERATION: How many datapoints each client gets per iteration (starts at 0). On iteration i, each client has (i+1) * LEN_PER_ITERATION samples
-len_per_iteration = 100  # using equal size datasets for each client in this example
+len_per_iteration = 50  # using equal size datasets for each client in this example
 LENS_PER_ITERATION = {client_name: len_per_iteration for client_name in client_names}
 
 # LEN_TEST: Length of test dataset. Note whole dataset length is 1797
@@ -35,9 +35,7 @@ VERBOSITY = 1  # 1 to print out the result of each iteration
 """Pyspark"""
 # NOTE: As it's currently implemented. Both these should be False to use Algorithm 1. Both these should be True to use Algorithm 2.
 # Not Using cumulative with algorithm 2 means the weights from your previous iterations don't end up getting used.
-
-USING_PYSPARK = False
-USING_CUMULATIVE = False
+USING_CUMULATIVE = True
 
 """Security"""
 # USE_SECURITY: Implements Diffie-Helman key exchange for added security. Slows runtime slightly, but no effect on performance
@@ -65,8 +63,8 @@ mean = 0
 
 """Client Dropout"""
 # CLIENT_DROPOUT: When TRUE, clients drop out of simulation when personal weights are within tolerance of federated weights
-CLIENT_DROPOUT = True
-tolerance = 20.0  # note this value should change depending on whether you are normalizing
+CLIENT_DROPOUT = False
+tolerance = 10.0  # note this value should change depending on whether you are normalizing
 
 """Latency"""
 SIMULATE_LATENCIES = True
