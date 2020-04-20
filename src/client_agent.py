@@ -12,12 +12,9 @@ from agent import Agent
 from message import Message
 from utils.dp_mechanisms import laplace
 import utils.diffie_hellman as dh
-from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import SGDClassifier
-from sklearn.preprocessing import MinMaxScaler
 
-from pyspark.ml.classification import LogisticRegression
+from sklearn.linear_model import SGDClassifier
+
 
 simplefilter(action='ignore', category=FutureWarning)
 
@@ -29,7 +26,7 @@ class ClientAgent(Agent):
         :param agent_number: id for agent
         :type agent_number: int
         :param train_datasets: dictionary mapping iteration to dataset for given iteration
-        :type train_datasets: dictionary indexed by ints mapping to pyspark dataframes
+        :type train_datasets: dictionary indexed by ints mapping to numpy arrays
         :param evaluator: evaluator instance used to evaluate new weights
         :type evaluator: evaluator, defined in parallelized.py
         :param active_clients: Clients currently in simulation. Will be updated if clients drop out
@@ -143,10 +140,12 @@ class ClientAgent(Agent):
                 'Not enough data to support a {}th iteration. Either change iteration data length in config.py or decrease amount of iterations.'.format(
                     iteration)))
 
-        if config.USING_PYSPARK:
-            weights, intercepts = self.compute_weights_pyspark(iteration)
+        if config.USING_CUMULATIVE: # choosing between algorithms
+            # compute weights from scratch
+            weights, intercepts = self.compute_weights_noncumulative(iteration)
         else:
-            weights, intercepts = self.compute_weights_sklearn(iteration)
+            # gradient descent on previous iteration
+            weights, intercepts = self.compute_weights_cumulative(iteration)
 
         self.personal_weights[iteration] = weights
         self.personal_intercepts[iteration] = intercepts
@@ -175,24 +174,16 @@ class ClientAgent(Agent):
 
         return Message(sender_name=self.name, recipient_name=self.directory.server_agents, body=body)
 
-    def compute_weights_pyspark(self, iteration):
-        """
-        Example of a function that would compute weights. This one uses PySpark to perform
-        logistic regression. If using this function, the datasets should be cumulative, i.e.,
-        the dataset in iteration i+1 should have the data from all previous iterations since the
-        weights are trained from scratch.
-        :return: weights and intercepts
-        :rtype: numpy arrays
-        """
-        dataset = self.train_datasets[iteration]
-        lr = LogisticRegression(maxIter=config.LOG_MAX_ITER)
-        lrModel = lr.fit(dataset)
+    def compute_weights_cumulative(self, iteration):
+        X, y = self.train_datasets[iteration]
+        lr = SGDClassifier(alpha=0.0001, loss="log", random_state=config.RANDOM_SEEDS[self.name][iteration])
+        lr.fit(X, y)
+        local_weights = lr.coef_
+        local_intercepts = lr.intercept_
+        return local_weights, local_intercepts
 
-        weights = lrModel.coefficientMatrix.toArray()
-        intercepts = lrModel.interceptVector
-        return weights, intercepts
+    def compute_weights_noncumulative(self, iteration):
 
-    def compute_weights_sklearn(self, iteration):
         """
         Example of a function that would compute weights. This one uses sklearn to perform
         logistic regression. If using this function, the datasets should not be cumulative, i.e.,

@@ -7,7 +7,6 @@ import random
 from client_agent import ClientAgent
 from server_agent import ServerAgent
 from directory import Directory
-from pyspark.sql import SparkSession
 from sklearn.datasets import load_digits
 
 from utils import data_formatting
@@ -27,9 +26,6 @@ class Initializer:
         """
 
         global len_per_iteration
-        if config.USING_PYSPARK:
-            spark = SparkSession.builder.appName('SecureFederatedLearning').getOrCreate()  # initialize spark session
-            spark.sparkContext.setLogLevel("ERROR")  # supress sparks messages
 
         digits = load_digits()  # using sklearn's MNIST dataset
         X, y = digits.data, digits.target
@@ -51,7 +47,7 @@ class Initializer:
         y_train = y_train[:number_of_samples]
 
         client_to_datasets = data_formatting.partition_data(X_train, y_train, config.client_names, iterations,
-                                                            config.LENS_PER_ITERATION, cumulative=config.USING_CUMULATIVE, pyspark=config.USING_PYSPARK)
+                                                            config.LENS_PER_ITERATION, cumulative=config.USING_CUMULATIVE)
 
         #print_config(len_per_iteration=config.LEN_PER_ITERATION)
         print('\n \n \nSTARTING SIMULATION \n \n \n')
