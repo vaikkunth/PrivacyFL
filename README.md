@@ -9,7 +9,7 @@ Arxiv Link : https://arxiv.org/abs/2002.08423
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
 
 
-## Installing
+### Installing
 First, clone this repository locally. Then create a conda enviroment by running:
 ```
 conda env create -f environment.yml -n YourEnvironmentName
@@ -23,6 +23,13 @@ To validate correct installation `cd` to `src` and run
 python run_simulation.py
 ```
 If you encounter any issues, please let us know so that we can help in getting the simulation up and running. 
+
+### Configuring Your Simulation
+This library is intended to be modified as needed for your use case. We have provided a default `config.py` file as an example. 
+
+Some simulation behavior can easily be configured by changing the files in the config file.  The file contains Boolean variables `USE_SECURITY` and `USE_DP_PRIVACY` to toggle security and differential privacy features. The security feature does not affect accuracy, however you can set `USE_DP_PRIVACY` to `False` if you want to see what the federated accuracy would be without differential privacy. 
+
+The default `config.py` file also has `USING_CUMULATIVE` set to `True`. What that means is that the dataset for a client on iteration `i` containts all of the datapoints in iteration `i-1` as well as len_per_iteration new datapoints. As such, this flag also makes it so that each client trains its weights from scratch each iteration. Conversely, one can set the `USING_CUMULATIVE` flag to `False`, which will make the dataset non-cumulative and clients perform gradient descent from last iteration's federated weights.
 
 ## System Architecure
 ### Agent 
@@ -74,9 +81,6 @@ Simulated time to receive federated weights: 0:00:09.202375
 As you can see, the simulation prints out i) the personal accuracy: the accuracy that the client can obtain by itself on its own dataset, adding no DP noise. NOTE: this quantitiy does incorporate other client's data if you set the config.USING_CUMULATIVE flag to False, since that indicates to clients that they should start training on this iteration using the federated weights from the previous iteration since the datasets aren't cumulative. ii) the federated accuracy: the accuracy of the federated model which is the average of all the clients' personal weights + differentially private noise for that iteration. Note that while the clients benefit from participating in the simulation in this example, that is not always the case. In particular, as one increases the amount of differentially private noise, the federated accuracy is expected to decrease. On the other hand, the personal accuracy will remain the same since it is assumed you don't add differentially private noise to your personal model since you are not sharing it. 
 <br/><br/> 
 In addition, this library also allows you to simulate how long it would take to receive the federated values back for each iteration. `Personal computation time` indicates how long your training took for that iteration while `Simulated time to receive federated weights` takes into account user-defined communication latencies between the clients and the server, as well as how long it took the other clients to compute their weights and the server to average them.
-
-## Configuring Your Simulation
-This library is intended to be modified as needed for your use case. However, some options can be configured easily through the `config.py` file. The file contains Boolean variables `USE_SECURITY` and `USE_DP_PRIVACY` to toggle security and differential privacy features. The security feature does not affect accuracy, however you can set `USE_DP_PRIVACY` to `False` if you want to see what the federated accuracy would be without differential privacy.
 
 ## Authors
 
