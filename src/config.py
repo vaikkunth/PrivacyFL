@@ -32,10 +32,11 @@ LEN_TEST = 300
 
 VERBOSITY = 1  # 1 to print out the result of each iteration
 
-"""Pyspark"""
-# NOTE: As it's currently implemented. Both these should be False to use Algorithm 1. Both these should be True to use Algorithm 2.
-# Not Using cumulative with algorithm 2 means the weights from your previous iterations don't end up getting used.
+"""Dataset Formatting"""
+# When set to True, simulation uses cumulative datasets (i.e., each iteration includes the last), which also affects the way
+# training is done. With cumulative datasets, each iteration each client trains on its dataset from scratch.
 USING_CUMULATIVE = True
+
 
 """Security"""
 # USE_SECURITY: Implements Diffie-Helman key exchange for added security. Slows runtime slightly, but no effect on performance
