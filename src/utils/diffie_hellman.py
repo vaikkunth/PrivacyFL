@@ -38,7 +38,6 @@ def keyexchange(n, party_i, my_pkey_list, my_skey_list, other_pkey_list):
 #PRG
 
 def randomize( r, modulo, clientsign):
-        # Call the double lenght pseudorsndom generator
         random.seed(r)
         rand            = random.getrandbits(256*2)
         rand_b_raw      = bin(rand)
