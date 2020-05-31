@@ -31,6 +31,7 @@ def partition_data(X, y, client_names, num_iterations, lens_per_iteration, cumul
                 end_indx = start_idx + len_per_iteration * j
             else:
                 end_indx = start_idx + len_per_iteration # add the length per iteration
+                
 
             #print('From {} to {}'.format(start_idx, end_indx))
             X_ij = X[start_idx:end_indx]
