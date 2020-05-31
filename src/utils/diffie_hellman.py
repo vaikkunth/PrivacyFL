@@ -5,35 +5,35 @@ import nacl.bindings as nb
 import random
 
 
-def keygeneration(n, party_i):
-    assert(party_i < n) ## Anton code
-    pkey_list = []
-    skey_list = []
+def keygeneration(n, ip): #ith party - ip
+    assert(ip < n) ## Anton code
+    publickey_list = []
+    secretkey_list = []
     for i in range(n):
-        if  i == party_i:
-            pkey_list.append(0)
-            skey_list.append(0)
+        if  i == ip:
+            publickey_list.append(0)
+            secretkey_list.append(0)
         else: 
             pk, sk = nb.crypto_kx_keypair()
-            pkey_list.append(pk)
-            skey_list.append(sk)
-    return  pkey_list,skey_list 
+            publickey_list.append(pk)
+            secretkey_list.append(sk)
+    return  publickey_list,secretkey_list 
 
-def keyexchange(n, party_i, my_pkey_list, my_skey_list, other_pkey_list):
-    common_key_list = []
+def keyexchange(n, ip, publickey_list, secretkey_list, extra_list):
+    com_key_list = []
     for i in range(n):
-        #Generate DH (common) keys 
-        if i == party_i:
-            common_key_list.append(0)
+        #Generate DH keys 
+        if i == ip:
+            com_key_list.append(0)
         else:
-            if i > party_i:
-                common_key_raw, _ = nb.crypto_kx_client_session_keys(my_pkey_list[i], my_skey_list[i], other_pkey_list[i])
+            if i > ip:
+                com_key_raw, _ = nb.crypto_kx_client_session_keys(publickey_list[i], secretkey_list[i], extra_list[i])
             else:  
-                _, common_key_raw = nb.crypto_kx_server_session_keys(my_pkey_list[i], my_skey_list[i], other_pkey_list[i])
+                _, com_key_raw = nb.crypto_kx_server_session_keys(publickey_list[i], secretkey_list[i], extra_list[i])
             #Hash the common keys
-            common_key = int.from_bytes(nb.crypto_hash_sha256(common_key_raw), byteorder='big')
-            common_key_list.append(common_key)
-    return common_key_list
+            com_key = int.from_bytes(nb.crypto_hash_sha256(com_key_raw), byteorder='big')
+            com_key_list.append(com_key)
+    return com_key_list
 
 
 #PRG
@@ -50,12 +50,12 @@ def randomize( r, modulo, clientsign):
         return r, R 
 
 
-def randomize_all(party_i, common_key_list, modulo):
+def randomize_all(ip, common_key_list, modulo):
     
     for i in range(len(common_key_list)):
-        if i == party_i:
+        if i == ip:
              continue
-        clientsign = 1 if i > party_i else -1
+        clientsign = 1 if i > ip else -1
         common_key_list[i], client = randomize( common_key_list[i], modulo, clientsign)
         
     return common_key_list, client
