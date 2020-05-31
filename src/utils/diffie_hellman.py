@@ -1,8 +1,9 @@
-import nacl.bindings as nb
-import random
 import pandas as pd
 import numpy as np
 import math
+import nacl.bindings as nb
+import random
+
 
 def keygeneration(n, party_i):
     assert(party_i < n) ## Anton code
@@ -43,7 +44,7 @@ def randomize( r, modulo, clientsign):
         rand_b_raw      = bin(rand)
         nr_zeros_append = 256 - (len(rand_b_raw) - 2)
         rand_b          = '0' * nr_zeros_append + rand_b_raw[2:]
-        # Use first half to mask the inputs and second half as the next seed to the pseudorsndom generator
+        # first half used to mask the inputs and second half as the next seed to the pseudorandom generator
         R = int(rand_b[0:256], 2)
         r = int(rand_b[256:] , 2)
         return r, R 
