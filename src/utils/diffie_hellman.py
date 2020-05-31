@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import math
-import nacl.bindings as nb
+import nacl.bindings as xc
 import random
 
 
@@ -14,7 +14,7 @@ def keygeneration(n, ip): #ith party - ip
             publickey_list.append(0)
             secretkey_list.append(0)
         else: 
-            pubkey, secretkey = nb.crypto_kx_keypair()
+            pubkey, secretkey = xc.crypto_kx_keypair()
             publickey_list.append(pubkey)
             secretkey_list.append(secretkey)
     return  publickey_list,secretkey_list 
@@ -27,11 +27,11 @@ def keyexchange(n, ip, publickey_list, secretkey_list, extra_list):
             exchangeKey.append(0)
         else:
             if i > ip:
-                comKeyint, _ = nb.crypto_kx_client_session_keys(publickey_list[i], secretkey_list[i], extra_list[i])
+                comKeyint, _ = xc.crypto_kx_client_session_keys(publickey_list[i], secretkey_list[i], extra_list[i])
             else:  
-                _, comKeyint = nb.crypto_kx_server_session_keys(publickey_list[i], secretkey_list[i], extra_list[i])
+                _, comKeyint = xc.crypto_kx_server_session_keys(publickey_list[i], secretkey_list[i], extra_list[i])
             #Hashing the common keys
-            exchangekey = int.from_bytes(nb.crypto_hash_sha256(comKeyint), byteorder='big')
+            exchangekey = int.from_bytes(xc.crypto_hash_sha256(comKeyint), byteorder='big')
             exchangeKey.append(exchangekey)
     return exchangeKey
 
