@@ -1,12 +1,8 @@
-# import nacl.bindings as nb
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 import random
-import pandas as pd
-import numpy as np
-import math
 
 def keygeneration(n, party_i):
     pkey_list = []

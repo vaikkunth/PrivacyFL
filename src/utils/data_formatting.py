@@ -16,6 +16,8 @@ def partition_data(X, y, client_names, num_iterations, lens_per_iteration, cumul
     :type cumulative: bool
     :return: dictionary mapping each client by name to another dictionary which contains its dataset for each
     iteration mapped by ints (iteration).
+    
+    
     """
     client_datasets = {client_name: None for client_name in client_names}
     # partition each client its data
@@ -30,6 +32,7 @@ def partition_data(X, y, client_names, num_iterations, lens_per_iteration, cumul
                 end_indx = start_idx + len_per_iteration * j
             else:
                 end_indx = start_idx + len_per_iteration # add the length per iteration
+                
 
             #print('From {} to {}'.format(start_idx, end_indx))
             X_ij = X[start_idx:end_indx]
