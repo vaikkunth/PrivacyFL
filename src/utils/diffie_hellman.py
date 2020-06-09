@@ -1,11 +1,14 @@
-import nacl.bindings as nb
+# import nacl.bindings as nb
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes
 import random
 import pandas as pd
 import numpy as np
 import math
 
 def keygeneration(n, party_i):
-    assert(party_i < n) ## Anton code
     pkey_list = []
     skey_list = []
     for i in range(n):
@@ -13,7 +16,8 @@ def keygeneration(n, party_i):
             pkey_list.append(0)
             skey_list.append(0)
         else: 
-            pk, sk = nb.crypto_kx_keypair()
+            sk = ec.generate_private_key(ec.SECP384R1(), default_backend())
+            pk = sk.public_key()
             pkey_list.append(pk)
             skey_list.append(sk)
     return  pkey_list,skey_list 
@@ -25,12 +29,16 @@ def keyexchange(n, party_i, my_pkey_list, my_skey_list, other_pkey_list):
         if i == party_i:
             common_key_list.append(0)
         else:
-            if i > party_i:
-                common_key_raw, _ = nb.crypto_kx_client_session_keys(my_pkey_list[i], my_skey_list[i], other_pkey_list[i])
-            else:  
-                _, common_key_raw = nb.crypto_kx_server_session_keys(my_pkey_list[i], my_skey_list[i], other_pkey_list[i])
+            shared_key = my_skey_list[i].exchange(ec.ECDH(), other_pkey_list[i])
             #Hash the common keys
-            common_key = int.from_bytes(nb.crypto_hash_sha256(common_key_raw), byteorder='big')
+            derived_key = HKDF(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=None,
+                info=b'handshake data',
+                backend=default_backend()
+            ).derive(shared_key)
+            common_key = int.from_bytes(derived_key, byteorder='big')
             common_key_list.append(common_key)
     return common_key_list
 
