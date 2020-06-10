@@ -12,10 +12,10 @@ def keygeneration(num, ip): # num - number of parties ; ip - ith party
             publicKeyList.append(0)
             secretKeyList.append(0)
         else: 
-            sk = ec.generate_private_key(ec.SECP384R1(), default_backend())
-            pk = sk.public_key()
-            publicKeyList.append(pk)
-            secretKeyList.append(sk)
+            secretKey = ec.generate_private_key(ec.SECP384R1(), default_backend())
+            publicKey = secretkey.public_key()
+            publicKeyList.append(publicKey)
+            secretKeyList.append(secretKey)
     return  publicKeyList,secretKeyList 
 
 def keyexchange(num, ip, selfPublicKeys, selfSecretKeys, othersPublicKeys):
@@ -44,13 +44,13 @@ def randomize(sd):
         randBin      = bin(rand)
         appendZeros = 256 - (len(randBin) - 2)
         r          = '0' * appendZeros + randBin[2:]
-        # first portion - mask the inputs ; second portion - next seed to PRG
+        # first portion - mask the inputs ; second portion - seed for PRG
         second = int(r[0:256], 2)
         first = int(r[256:] , 2)
         return first, second 
 
 
-def randomize_all(ip, exchangeKeys, modulo):
+def randomize_all(ip, exchangeKeys, div):
     
     for i in range(len(exchangeKeys)):
         if i == ip:
