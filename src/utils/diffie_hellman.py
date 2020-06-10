@@ -13,7 +13,7 @@ def keygeneration(num, ip): # num - number of parties ; ip - ith party
             secretKeyList.append(0)
         else: 
             secretKey = ec.generate_private_key(ec.SECP384R1(), default_backend())
-            publicKey = secretkey.public_key()
+            publicKey = secretKey.public_key()
             publicKeyList.append(publicKey)
             secretKeyList.append(secretKey)
     return  publicKeyList,secretKeyList 
