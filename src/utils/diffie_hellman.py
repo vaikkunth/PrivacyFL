@@ -4,62 +4,57 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 import random
 
-def keygeneration(n, party_i):
-    pkey_list = []
-    skey_list = []
-    for i in range(n):
-        if  i == party_i:
-            pkey_list.append(0)
-            skey_list.append(0)
+def keygeneration(num, ip): # num - number of parties ; ip - ith party
+    publicKeyList = []
+    secretKeyList = []
+    for i in range(num):
+        if  i == ip:
+            publicKeyList.append(0)
+            secretKeyList.append(0)
         else: 
             sk = ec.generate_private_key(ec.SECP384R1(), default_backend())
             pk = sk.public_key()
-            pkey_list.append(pk)
-            skey_list.append(sk)
-    return  pkey_list,skey_list 
+            publicKeyList.append(pk)
+            secretKeyList.append(sk)
+    return  publicKeyList,secretKeyList 
 
-def keyexchange(n, party_i, my_pkey_list, my_skey_list, other_pkey_list):
-    common_key_list = []
-    for i in range(n):
-        #Generate DH (common) keys 
-        if i == party_i:
-            common_key_list.append(0)
+def keyexchange(num, ip, selfPublicKeys, selfSecretKeys, othersPublicKeys):
+    exchangeKeys = []
+    for i in range(num):
+        if i == ip:
+            exchangeKeys.append(0)
         else:
-            shared_key = my_skey_list[i].exchange(ec.ECDH(), other_pkey_list[i])
-            #Hash the common keys
-            derived_key = HKDF(
+            shareKey = selfSecretKeys[i].exchange(ec.ECDH(), othersPublicKeys[i])
+            #Hashing the keys
+            newKey = HKDF(
                 algorithm=hashes.SHA256(),
                 length=32,
                 salt=None,
                 info=b'handshake data',
                 backend=default_backend()
-            ).derive(shared_key)
-            common_key = int.from_bytes(derived_key, byteorder='big')
-            common_key_list.append(common_key)
-    return common_key_list
+            ).derive(shareKey)
+            keyCom = int.from_bytes(newKey, byteorder='big')
+            exchangeKeys.append(keyCom)
+    return exchangeKeys
 
 
-#PRG
-
-def randomize( r, modulo, clientsign):
-        # Call the double lenght pseudorsndom generator
-        random.seed(r)
+def randomize(sd):
+        random.seed(sd)
         rand            = random.getrandbits(256*2)
-        rand_b_raw      = bin(rand)
-        nr_zeros_append = 256 - (len(rand_b_raw) - 2)
-        rand_b          = '0' * nr_zeros_append + rand_b_raw[2:]
-        # Use first half to mask the inputs and second half as the next seed to the pseudorsndom generator
-        R = int(rand_b[0:256], 2)
-        r = int(rand_b[256:] , 2)
-        return r, R 
+        randBin      = bin(rand)
+        appendZeros = 256 - (len(randBin) - 2)
+        r          = '0' * appendZeros + randBin[2:]
+        # first portion - mask the inputs ; second portion - next seed to PRG
+        second = int(r[0:256], 2)
+        first = int(r[256:] , 2)
+        return first, second 
 
 
-def randomize_all(party_i, common_key_list, modulo):
+def randomize_all(ip, exchangeKeys, modulo):
     
-    for i in range(len(common_key_list)):
-        if i == party_i:
+    for i in range(len(exchangeKeys)):
+        if i == ip:
              continue
-        clientsign = 1 if i > party_i else -1
-        common_key_list[i], client = randomize( common_key_list[i], modulo, clientsign)
+        exchangeKeys[i], party = randomize( exchangeKeys[i])
         
-    return common_key_list, client
+    return exchangeKeys, party
